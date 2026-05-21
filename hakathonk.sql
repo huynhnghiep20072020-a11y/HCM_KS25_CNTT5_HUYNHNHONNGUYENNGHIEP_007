@@ -123,8 +123,13 @@ LIMIT 2 OFFSET 2;
 -- phần 4 
 -- câu 1 liệt kê các thông tin khám gồm họ tên bệnh nhân , họ tên bác sĩ chuyên khoa ,phí khám và thời điểm hẹnh khám , với dữ liệu đucojw lấy từ accs bảng quan hệ thống 
 
-
-
+SELECT p.full_name AS patient_name,
+       d.full_name AS doctor_name,
+       a.fee,
+       a.appointment_time
+FROM APPOINTMENTS a
+JOIN PATIENTS p ON a.patient_id = p.patient_id
+JOIN DOCTORS d ON a.doctor_id = d.doctor_id;
 
 -- câu 2 liệt kê thông tin bác sĩ gồm họ tên và tổng phí khám mà bác sĩ đó thực hiện (chỉ tính phiếu Comleted) chỉ hiện thị những bác sĩ có tổng phí lớn hơn 500000 
 
@@ -194,14 +199,72 @@ DELIMITER ;
 -- nếu bằng nhau thì trả về Taget met 
 -- nếu nhỏ hơn thì trả về Normal
 
+DROP PROCEDURE IF EXISTS sp_doctor_completed_revenue_status;
+DELIMITER $$
+CREATE PROCEDURE sp_doctor_completed_revenue_status(
+  IN p_doctor_id INT,
+  OUT p_result VARCHAR(50)
+)
+BEGIN
+  DECLARE v_total_fee DECIMAL(15,2) DEFAULT 0;
 
+  SELECT COALESCE(SUM(fee), 0)
+  INTO v_total_fee
+  FROM APPOINTMENTS
+  WHERE doctor_id = p_doctor_id
+    AND status = 'Completed';
 
+  IF v_total_fee > 1000000 THEN
+    SET p_result = 'High revenue';
+  ELSEIF v_total_fee = 1000000 THEN
+    SET p_result = 'Target met';
+  ELSE
+    SET p_result = 'Normal';
+  END IF;
+END$$
+DELIMITER ;
 
-
-
-
--- câu 2 viết một stored procedure để thực hiện việc đõi bác sĩ cho mọt phiếu hẹn khám gồm các bước 
+-- câu 2 viết một stored procedure để thực hiện việc đỗi bác sĩ cho một phiếu hẹn khám gồm các bước 
 -- bước 1 bắt đầu quá trình xử lý 
--- bước 2 cặp nhật mã bác sĩ mới cho phiếu hẹn trong bảng appointments 
--- bước 3 ghi một abnr ghi mới vào bảng visit_log với ghi chú doctor reassigned 
--- bước 4 Nếu toàn bộ quá trình thành công thfi hoàn tất , nếu xảy ra lõi ở bất kỳ bước nào thì hủy toàn bộ thao thác 
+-- bước 2 cập nhật mã bác sĩ mới cho phiếu hẹn trong bảng appointments 
+-- bước 3 ghi một bản ghi mới vào bảng visit_log với ghi chú doctor reassigned 
+-- bước 4 Nếu toàn bộ quá trình thành công thì hoàn tất , nếu xảy ra lỗi ở bất kỳ bước nào thì hủy toàn bộ thao tác
+
+DROP PROCEDURE IF EXISTS sp_reassign_doctor_for_appointment;
+DELIMITER $$
+CREATE PROCEDURE sp_reassign_doctor_for_appointment(
+  IN p_appointment_id INT,
+  IN p_new_doctor_id INT,
+  OUT p_result VARCHAR(255)
+)
+BEGIN
+  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+  BEGIN
+    ROLLBACK;
+    SET p_result = 'Failed: transaction rolled back';
+  END;
+
+  START TRANSACTION;
+
+  UPDATE APPOINTMENTS
+  SET doctor_id = p_new_doctor_id
+  WHERE appointment_id = p_appointment_id;
+
+  IF ROW_COUNT() = 0 THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Appointment not found';
+  END IF;
+
+  INSERT INTO VISIT_LOG(record_id, doctor_id, log_time, note)
+  SELECT mr.record_id, p_new_doctor_id, NOW(), 'doctor reassigned'
+  FROM MEDICAL_RECORDS mr
+  WHERE mr.appointment_id = p_appointment_id
+  LIMIT 1;
+
+  IF ROW_COUNT() = 0 THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Related medical record not found';
+  END IF;
+
+  COMMIT;
+  SET p_result = 'Success: doctor reassigned';
+END$$
+DELIMITER ;
