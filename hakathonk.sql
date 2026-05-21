@@ -24,8 +24,8 @@ CREATE TABLE APPOINTMENTS(
   appointment_time DATETIME NOT NULL,
   fee DECIMAL(10,2) DEFAULT 0,
   status VARCHAR(15),
-  FOREIGN KEY (doctor_id) REFERENCES DOCTORS(doctor_id) ON DELETE CASCADE,
-  FOREIGN KEY (patient_id) REFERENCES PATIENTS(patient_id) ON DELETE CASCADE
+  FOREIGN KEY (doctor_id) REFERENCES DOCTORS(doctor_id) ,
+  FOREIGN KEY (patient_id) REFERENCES PATIENTS(patient_id)
 );
 
 CREATE TABLE MEDICAL_RECORDS(
@@ -35,7 +35,7 @@ CREATE TABLE MEDICAL_RECORDS(
   diagnosis VARCHAR(100) NOT NULL,
   prescription VARCHAR(200),
   record_date DATETIME NOT NULL,
-  FOREIGN KEY (appointment_id) REFERENCES APPOINTMENTS(appointment_id) ON DELETE CASCADE 
+  FOREIGN KEY (appointment_id) REFERENCES APPOINTMENTS(appointment_id)
 );
 
 CREATE TABLE VISIT_LOG(
@@ -45,7 +45,7 @@ CREATE TABLE VISIT_LOG(
   log_time DATETIME NOT NULL,
   note VARCHAR(255),
   FOREIGN KEY (doctor_id) REFERENCES DOCTORS(doctor_id) ON DELETE CASCADE,
-  FOREIGN KEY (record_id) REFERENCES MEDICAL_RECORDS(record_id) ON DELETE CASCADE
+  FOREIGN KEY (record_id) REFERENCES MEDICAL_RECORDS(record_id)
 );
 
 INSERT INTO PATIENTS(patient_id,full_name,phone_number,gender,date_of_birth) VALUES
@@ -118,7 +118,7 @@ WHERE date_of_birth BETWEEN '1998-01-01' AND '2001-12-31'
 SELECT appointment_id, appointment_time, fee
 FROM APPOINTMENTS
 ORDER BY fee DESC
-LIMIT 2 OFFSET 2;
+LIMIT 2 OFFSET 2;  -- lỗi trang nên cho mỗi trang 2 bản 
 
 -- phần 4 
 -- câu 1 liệt kê các thông tin khám gồm họ tên bệnh nhân , họ tên bác sĩ chuyên khoa ,phí khám và thời điểm hẹnh khám , với dữ liệu đucojw lấy từ accs bảng quan hệ thống 
@@ -133,11 +133,21 @@ JOIN DOCTORS d ON a.doctor_id = d.doctor_id;
 
 -- câu 2 liệt kê thông tin bác sĩ gồm họ tên và tổng phí khám mà bác sĩ đó thực hiện (chỉ tính phiếu Comleted) chỉ hiện thị những bác sĩ có tổng phí lớn hơn 500000 
 
-
+SELECT d.full_name,
+       SUM(a.fee) AS total_fee
+FROM DOCTORS d
+JOIN APPOINTMENTS a ON d.doctor_id = a.doctor_id
+WHERE a.status = 'Completed'
+GROUP BY d.doctor_id, d.full_name
+HAVING SUM(a.fee) > 500000;
 
 -- câu 3 liệt kê các thông tin bác sĩ gồm doctr_id ,ful_name và rating của những bác sĩ có điểm đánh gía cao nhất 
 
-
+SELECT doctor_id,
+       full_name,
+       rating
+FROM DOCTORS
+WHERE rating = (SELECT MAX(rating) FROM DOCTORS);
 
 -- phần 5 
 -- câu 1 tạo chỉ mục trên bảng appointments dựa trên hai thông tin là trang thái hẹn tái khám và phí khám phucn vụ việc tối ưu truy vấn 
